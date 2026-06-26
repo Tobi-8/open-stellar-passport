@@ -327,7 +327,6 @@ describe("PassportStore — expiry", () => {
     vi.useFakeTimers({ now: new Date("2025-01-01T00:00:00.000Z").getTime() });
     store.issuePassport("agent-exp-2", 100, "hash2");
 
-    // Still within 30-day window
     vi.setSystemTime(new Date("2025-01-15T00:00:00.000Z").getTime());
 
     expect(store.authorizePassportSpend("agent-exp-2", 50)).toEqual({
@@ -340,7 +339,6 @@ describe("PassportStore — expiry", () => {
     vi.useFakeTimers({ now: new Date("2025-01-01T00:00:00.000Z").getTime() });
     store.issuePassport("agent-exp-3", 100, "hash3");
 
-    // Advance past the 30-day expiry
     vi.setSystemTime(new Date("2025-02-05T00:00:00.000Z").getTime());
 
     const result = store.authorizePassportSpend("agent-exp-3", 50);
@@ -352,8 +350,6 @@ describe("PassportStore — expiry", () => {
   });
 
   it("does not apply expiry check for agents without a stored passport", () => {
-    // Existing tests create stores without calling issuePassport — they must
-    // still pass spend-limit / circuit-breaker checks unaffected.
     store = new PassportStore();
     expect(store.authorizePassportSpend("agent-no-record", 10)).toEqual({
       ok: true,
@@ -390,11 +386,9 @@ describe("PassportStore — renewal", () => {
     vi.useFakeTimers({ now: new Date("2025-01-01T00:00:00.000Z").getTime() });
     store.issuePassport("agent-renew-1", 200, "hashR1");
 
-    // Advance past expiry then renew
     vi.setSystemTime(new Date("2025-02-05T00:00:00.000Z").getTime());
     const result = store.renewPassport("agent-renew-1", "hashR1");
 
-    // 2025-02-05 + 30 days = 2025-03-07
     expect(result).toEqual({ ok: true, expiresAt: "2025-03-07T00:00:00.000Z" });
 
     const passport = store.getPassport("agent-renew-1")!;
@@ -409,17 +403,14 @@ describe("PassportStore — renewal", () => {
 
     vi.setSystemTime(new Date("2025-02-05T00:00:00.000Z").getTime());
 
-    // Confirm expired
     expect(store.authorizePassportSpend("agent-renew-2", 50)).toMatchObject({
       ok: false,
       reason: "PassportExpired",
     });
 
-    // Renew
     const renewal = store.renewPassport("agent-renew-2", "hashR2");
     expect(renewal.ok).toBe(true);
 
-    // Now should pass
     expect(store.authorizePassportSpend("agent-renew-2", 50)).toEqual({
       ok: true,
     });
@@ -433,7 +424,6 @@ describe("PassportStore — renewal", () => {
     vi.setSystemTime(new Date("2025-02-05T00:00:00.000Z").getTime());
     const result = store.renewPassport("agent-renew-ttl", "hashRttl", 7);
 
-    // 2025-02-05 + 7 days = 2025-02-12
     expect(result).toEqual({ ok: true, expiresAt: "2025-02-12T00:00:00.000Z" });
   });
 
@@ -490,9 +480,8 @@ describe("PassportStore — revocation via revocation-store", () => {
     store = new PassportStore();
     vi.useFakeTimers({ now: new Date("2025-01-01T00:00:00.000Z").getTime() });
     store.issuePassport("agent-rv-3", 100, "hash-rv-3");
-    vi.setSystemTime(new Date("2025-02-05T00:00:00.000Z").getTime()); // past expiry
+    vi.setSystemTime(new Date("2025-02-05T00:00:00.000Z").getTime());
     revocationStoreRevoke("agent-rv-3");
-    // Should see PassportRevoked, not PassportExpired
     expect(store.authorizePassportSpend("agent-rv-3", 10)).toEqual({
       ok: false,
       reason: "PassportRevoked",
